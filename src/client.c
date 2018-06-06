@@ -6,7 +6,7 @@ int setDNSPacket(unsigned char *buf, Query *questions, int ques_count) {
   setDNSHeader(dns_header, ques_count, 0, 0, 0);
   int ques_len = 0;
   for (int i = 0; i < ques_count; i++) {
-    ques_len += addQuery(&buf[sizeof(DNS_Header) + ques_len], questions + i);
+    ques_len += addQuery(&buf[sizeof(DNS_Header) + ques_len], questions + i, 1);
   }
   return (int)sizeof(DNS_Header) + ques_len;
 }

@@ -16,6 +16,8 @@
 #define Q_T_PTR 12  // Domain name pointer
 #define Q_T_MX 15   // Mail server
 
+
+
 // Constant sized fields of the resource record structure
 #pragma pack(push, 1)
 typedef struct R_Data {
@@ -78,7 +80,8 @@ typedef struct DNS_Packet {
 unsigned char *readDomainName(unsigned char *reader, unsigned char *buffer,
                               int *count);
 void readDNSPacket(unsigned char *buf, DNS_Packet *packet);
-int addQuery(unsigned char *reader, Query *query);
+int addQuery(unsigned char *reader, Query *query, int is_client);
+int addResRecord(unsigned char *reader, ResRecord *resRecord);
 void setDNSHeader(DNS_Header *header, uint16_t queryCount, uint16_t answerCount,
                   uint16_t authorCount, uint16_t additionCount);
 void changeToDnsNameFormat(unsigned char *dns, unsigned char *host);
