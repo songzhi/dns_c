@@ -1,3 +1,6 @@
+#ifndef DNS_PACKET_INCLUDED
+#define DNS_PACKET_INCLUDED
+
 #include <arpa/inet.h> //inet_addr , inet_ntoa , ntohs etc
 #include <netinet/in.h>
 #include <stdio.h>  //printf
@@ -41,7 +44,7 @@ typedef struct DNS_Header {
   unsigned char opcode : 4; // purpose of message,usually being 0
   unsigned char qr : 1;     // 0:query/1:response
 
-  unsigned char rcode : 4; // response code,usually being 0
+  unsigned char rcode : 4; // response code,0 represent correct,otherwise 1
   unsigned char cd : 1;    // checking disabled,must be zero
   unsigned char ad : 1;    // authenticated data,must be zero
   unsigned char z : 1;     // its z! reserved,must be zero
@@ -75,9 +78,10 @@ typedef struct DNS_Packet {
 unsigned char *readDomainName(unsigned char *reader, unsigned char *buffer,
                               int *count);
 void readDNSPacket(unsigned char *buf, DNS_Packet *packet);
-void sendPacketAndGetResult(unsigned char *buf, int data_len);
-int setDNSPacket(unsigned char *buf, unsigned char *host, int query_type);
+int addQuery(unsigned char *reader, Query *query);
 void setDNSHeader(DNS_Header *header, uint16_t queryCount, uint16_t answerCount,
                   uint16_t authorCount, uint16_t additionCount);
 void changeToDnsNameFormat(unsigned char *dns, unsigned char *host);
 void printPacket(DNS_Packet *packet);
+
+#endif

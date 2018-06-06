@@ -1,17 +1,6 @@
-#include "DataStructure.h"
+#include "DNSPacket.h"
 
-int main(void) {
-  unsigned char hostname[100];
-  printf("Enter Hostname to Lookup : ");
-  scanf("%s", hostname);
-  unsigned char buf[65536];
-  int data_len = setDNSPacket(buf, hostname, Q_T_A);
-  sendPacketAndGetResult(buf, data_len);
-  DNS_Packet packet;
-  readDNSPacket(buf, &packet);
-  printPacket(&packet);
-  return 0;
-}
+
 
 void setDNSHeader(DNS_Header *header, uint16_t queryCount, uint16_t answerCount,
                   uint16_t authorCount, uint16_t additionCount) {
@@ -51,63 +40,41 @@ void changeToDnsNameFormat(unsigned char *dns, unsigned char *host) {
   *dns++ = '\0';
 }
 
-int addQuery(unsigned char *reader, unsigned char *host, int query_type) {
+int addQuery(unsigned char *reader, Query *query) {
   unsigned char *qname = reader;
-  changeToDnsNameFormat(qname, host);
+  changeToDnsNameFormat(qname, query->name);
   int qname_len = strlen((const char *)qname) + 1;
   Question *qinfo = (Question *)&reader[qname_len];
   qinfo->qtype =
-      htons(query_type);    // type of the query , A , MX , CNAME , NS etc
-  qinfo->qclass = htons(1); // internet
+      htons(query->question->qtype);    // type of the query , A , MX , CNAME , NS etc
+  qinfo->qclass = htons(query->question->qtype); // internet
   return qname_len + (int)sizeof(Question);
 }
 
-int setDNSPacket(unsigned char *buf, unsigned char *host, int query_type) {
-  DNS_Header *dns_header = (DNS_Header *)buf;
-  setDNSHeader(dns_header, 1, 0, 0, 0);
-  int ques_len = addQuery(&buf[sizeof(DNS_Header)],host,query_type);
-  
-  return (int)sizeof(DNS_Header) + ques_len;
-}
-
-void sendPacketAndGetResult(unsigned char *buf, int data_len) {
-  struct sockaddr_in dest;
-  int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
-  dest.sin_family = AF_INET;
-  dest.sin_port = htons(53);
-  dest.sin_addr.s_addr = inet_addr("208.67.222.222");
-  printf("\nSending Packet...");
-  if (sendto(sock, (char *)buf, data_len, 0, (struct sockaddr *)&dest,
-             sizeof(dest)) < 0) {
-    perror("sendto failed");
-  }
-  printf("Done");
-  int i = sizeof dest;
-  printf("\nReceiving answer...");
-  if (recvfrom(sock, (char *)buf, 65536, 0, (struct sockaddr *)&dest,
-               (socklen_t *)&i) < 0) {
-    perror("recvfrom failed");
-  }
-  printf("Done");
-}
 
 void readDNSPacket(unsigned char *buf, DNS_Packet *packet) {
   DNS_Header *dns_header = (DNS_Header *)buf;
   packet->Header = dns_header;
-  packet->Questions = (Query *)&buf[sizeof(DNS_Header)];
   packet->Answer_RRs =
       (ResRecord *)malloc(sizeof(ResRecord) * ntohs(dns_header->answerCount));
   packet->Authority_RRs = (ResRecord *)malloc(
       sizeof(ResRecord) * ntohs(dns_header->authorityCount));
   packet->Additional_RRs = (ResRecord *)malloc(
       sizeof(ResRecord) * ntohs(dns_header->additionalCount));
-  // move ahead of the dns header and the query field
-  unsigned char *reader = &buf[sizeof(DNS_Header)];
-  for (int i = 0; i < ntohs(dns_header->queryCount); i++) {
-    reader += strlen((const char *)reader) + 1 + sizeof(Question);
-  }
-  int stop = 0;
 
+  // move ahead of the dns header and read the query field
+  unsigned char *reader = &buf[sizeof(DNS_Header)];
+  Query *queries = (Query *)malloc(sizeof(Query) * ntohs(dns_header->queryCount));
+  int stop = 0;
+  for (int i = 0; i < ntohs(dns_header->queryCount); i++) { 
+    queries[i].name = readDomainName(reader, buf, &stop);
+    reader += stop;
+    queries[i].question = (Question *)(reader);
+    reader += sizeof(Question);
+  }
+  packet->Questions = queries;
+
+  // read answers
   ResRecord *answers = packet->Answer_RRs;
   for (int i = 0; i < ntohs(dns_header->answerCount); i++) {
     answers[i].name = readDomainName(reader, buf, &stop);
@@ -173,12 +140,23 @@ void readDNSPacket(unsigned char *buf, DNS_Packet *packet) {
 
 void printPacket(DNS_Packet *packet) {
   // print answers
-  ResRecord *answers = packet->Answer_RRs;
+  
   DNS_Header *dns_header = packet->Header;
 
+  if (dns_header->rcode == 1) {
+    printf("Format Error");
+  }
+
+  Query *queries = packet->Questions;
+  printf("\nQueries : %d \n", ntohs(dns_header->queryCount));
+  for (int i=0; i<ntohs(dns_header->queryCount);i++){
+    printf("  Name:%s Type:%d \n", queries[i].name, ntohs(queries[i].question->qtype));
+  }
+
+  ResRecord *answers = packet->Answer_RRs;
   printf("\nAnswer Records : %d \n", ntohs(dns_header->answerCount));
   for (int i = 0; i < ntohs(dns_header->answerCount); i++) {
-    printf("Name : %s ", answers[i].name);
+    printf("  Name : %s ", answers[i].name);
 
     if (ntohs(answers[i].resource->type) == Q_T_A) // IPv4 address
     {
@@ -202,7 +180,7 @@ void printPacket(DNS_Packet *packet) {
   printf("\nAuthoritive Records : %d \n", ntohs(dns_header->authorityCount));
   for (int i = 0; i < ntohs(dns_header->authorityCount); i++) {
 
-    printf("Name : %s ", auth[i].name);
+    printf("  Name : %s ", auth[i].name);
     if (ntohs(auth[i].resource->type) == 2) {
       printf("has nameserver : %s", auth[i].rdata);
     }
@@ -213,7 +191,7 @@ void printPacket(DNS_Packet *packet) {
   ResRecord *addit = packet->Additional_RRs;
   printf("\nAdditional Records : %d \n", ntohs(dns_header->additionalCount));
   for (int i = 0; i < ntohs(dns_header->additionalCount); i++) {
-    printf("Name : %s ", addit[i].name);
+    printf("  Name : %s ", addit[i].name);
     if (ntohs(addit[i].resource->type) == 1) {
       long *p;
       p = (long *)addit[i].rdata;
@@ -239,7 +217,7 @@ unsigned char *readDomainName(unsigned char *reader, unsigned char *buffer,
   // read the names in 3www5baidu3com format
   while (*reader != 0) {
     if (*reader >= 192) {
-      // 对于出现过的name采用压缩指针的方式
+      // 出现过的name采用压缩指针的方式
       // 49152 = 11000000 00000000
       offset = (*reader) * 256 + *(reader + 1) - 49152;
       reader = buffer + offset - 1;
