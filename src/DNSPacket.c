@@ -1,6 +1,6 @@
 #include "DNSPacket.h"
 
-uint16_t ntons(uint16_t __hostshort) {
+uint16_t __ntons(uint16_t __hostshort) {
   return __hostshort;
 }
 
@@ -26,51 +26,25 @@ void setDNSHeader(DNS_Header *header, uint16_t queryCount, uint16_t answerCount,
 /*
  * This will convert www.baidu.com to 3www5baidu3com
  * */
-void changeToDnsNameFormat(unsigned char *dns, unsigned char *host) {
+void changeToDnsNameFormat(unsigned char *des, const unsigned char *host) {
   int lock = 0, i;
-  strcat((char *)host, ".");
-
-  for (i = 0; i < strlen((char *)host); i++) {
-    if (host[i] == '.') {
-      *dns++ = i - lock;
+  int host_len = strlen((char *)host);
+  unsigned char *_host = (unsigned char *)malloc(sizeof(unsigned char) * host_len);
+  strcpy((char *)_host, (char *)host);
+  strcat((char *)_host, ".");
+  for (i = 0; i < host_len + 1; i++) {
+    if (_host[i] == '.') {
+      *des++ = i - lock;
       for (; lock < i; lock++) {
-        *dns++ = host[lock];
+        *des++ = _host[lock];
       }
       lock++; // or lock=i+1;
     }
   }
-  *dns++ = '\0';
+  *des++ = '\0';
 }
 
-int addQuery(unsigned char *reader, Query *query, int is_client) {
-  uint16_t (*trans_func)(uint16_t __hostshort);
-  if (is_client) {
-    trans_func = htons;
-  } else {
-    trans_func = ntons;
-  }
-  unsigned char *qname = reader;
-  changeToDnsNameFormat(qname, query->name);
-  int qname_len = strlen((const char *)qname) + 1;
-  Question *qinfo = (Question *)&reader[qname_len];
-  qinfo->qtype = trans_func(
-      query->question->qtype); // type of the query , A , MX , CNAME , NS etc
-  qinfo->qclass = trans_func(query->question->qclass); // internet
-  return qname_len + (int)sizeof(Question);
-}
 
-int addResRecord(unsigned char *reader, ResRecord *resRecord) {
-  unsigned char *name = reader;
-  changeToDnsNameFormat(name, resRecord->name);
-  int name_len = strlen((const char *)name) + 1;
-  R_Data *r_data = (R_Data *)&reader[name_len];
-  r_data->ttl = htonl(resRecord->resource->ttl);
-  r_data->type = htons(resRecord->resource->type);
-  r_data->data_len = htons(resRecord->resource->data_len);
-  reader += name_len + sizeof(R_Data);
-  memcpy(reader, resRecord->rdata, resRecord->resource->data_len);
-  return name_len + sizeof(R_Data) + resRecord->resource->data_len;
-}
 
 void readDNSPacket(unsigned char *buf, DNS_Packet *packet) {
   DNS_Header *dns_header = (DNS_Header *)buf;
@@ -195,7 +169,7 @@ void printPacket(DNS_Packet *packet) {
 
     if (ntohs(answers[i].resource->type) == Q_T_MX) {
       // Canonical name for an alias
-      printf("has mail hostname : %s（preference: %d）", answers[i].rdata+2, ntohs(*(unsigned short *)answers[i].rdata));
+      printf("has mail exchange : %s（preference: %d）", answers[i].rdata+2, ntohs(*(unsigned short *)answers[i].rdata));
     }
 
     if (ntohs(answers[i].resource->type) == Q_T_CNAME) {
@@ -237,36 +211,12 @@ void printPacket(DNS_Packet *packet) {
 unsigned char *readDomainName(unsigned char *reader, unsigned char *buffer,
                               int *count) {
   unsigned char *name;
-  unsigned int p = 0, jumped = 0, offset;
+  unsigned int p = 0;
   int i, j;
-
-  *count = 1;
+  *count = (int)strlen((const char *)reader) + 1;
+  
   name = (unsigned char *)malloc(256);
-
-  name[0] = '\0';
-
-  // read the names in 3www5baidu3com format
-  while (*reader != 0) {
-    if (*reader >= 192) {
-      // 出现过的name采用压缩指针的方式
-      // 49152 = 11000000 00000000
-      offset = (*reader) * 256 + *(reader + 1) - 49152;
-      reader = buffer + offset - 1;
-      jumped = 1;
-    } else {
-      name[p++] = *reader;
-    }
-
-    reader = reader + 1;
-    if (jumped == 0) {
-      *count = *count + 1;
-    }
-  }
-
-  name[p] = '\0';
-  if (jumped == 1) {
-    *count = *count + 1;
-  }
+  strcpy((char *)name, (const char *)reader);
 
   // now convert 3www5baidu3com0 to www.baidu.com
   for (i = 0; i < (int)strlen((const char *)name); i++) {

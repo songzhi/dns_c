@@ -1,12 +1,21 @@
 #include "client.h"
 
+int addQuery(unsigned char *reader, Query *query) {
+  unsigned char *qname = reader;
+  changeToDnsNameFormat(qname, query->name);
+  int qname_len = strlen((const char *)qname) + 1;
+  Question *qinfo = (Question *)&reader[qname_len];
+  qinfo->qtype = htons(query->question->qtype);
+  qinfo->qclass = htons(query->question->qclass); // internet
+  return qname_len + (int)sizeof(Question);
+}
 
 int setDNSPacket(unsigned char *buf, Query *questions, int ques_count) {
   DNS_Header *dns_header = (DNS_Header *)buf;
   setDNSHeader(dns_header, ques_count, 0, 0, 0);
   int ques_len = 0;
   for (int i = 0; i < ques_count; i++) {
-    ques_len += addQuery(&buf[sizeof(DNS_Header) + ques_len], questions + i, 1);
+    ques_len += addQuery(&buf[sizeof(DNS_Header) + ques_len], questions + i);
   }
   return (int)sizeof(DNS_Header) + ques_len;
 }
@@ -15,8 +24,8 @@ void sendPacketAndGetResult(unsigned char *buf, int data_len) {
   struct sockaddr_in dest;
   int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
   dest.sin_family = AF_INET;
-  dest.sin_port = htons(8888);
-  dest.sin_addr.s_addr = inet_addr("127.0.0.1");
+  dest.sin_port = htons(53);
+  dest.sin_addr.s_addr = inet_addr("127.0.0.155");
   printf("\nSending Packet...");
   if (sendto(sock, (char *)buf, data_len, 0, (struct sockaddr *)&dest,
              sizeof(dest)) < 0) {
