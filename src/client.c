@@ -1,5 +1,23 @@
 #include "client.h"
 
+void setDNSHeader(DNS_Header *header, uint16_t id, uint16_t queryCount) {
+  header->id = htons(id);
+  header->qr = 0;     // This is a query
+  header->opcode = 0; // This is a standard query
+  header->aa = 0;     // Not Authoritative
+  header->tc = 0;     // This message is not truncated
+  header->rd = 1;     // Recursion Desired
+  header->ra = 0;     // Recursion not available
+  header->z = 0;
+  header->ad = 0;
+  header->cd = 0;
+  header->rcode = 0;
+  header->queryCount = htons(queryCount);
+  header->answerCount = 0;
+  header->authorityCount = 0;
+  header->additionalCount = 0;
+}
+
 int addQuery(unsigned char *reader, Query *query) {
   unsigned char *qname = reader;
   changeToDnsNameFormat(qname, query->name);
@@ -12,7 +30,7 @@ int addQuery(unsigned char *reader, Query *query) {
 
 int setDNSPacket(unsigned char *buf, Query *questions, int ques_count) {
   DNS_Header *dns_header = (DNS_Header *)buf;
-  setDNSHeader(dns_header, ques_count, 0, 0, 0);
+  setDNSHeader(dns_header,getpid() ,ques_count);
   int ques_len = 0;
   for (int i = 0; i < ques_count; i++) {
     ques_len += addQuery(&buf[sizeof(DNS_Header) + ques_len], questions + i);
@@ -22,20 +40,19 @@ int setDNSPacket(unsigned char *buf, Query *questions, int ques_count) {
 
 void sendPacketAndGetResult(unsigned char *buf, int data_len) {
   struct sockaddr_in dest;
-  int sock = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+  int sock = socket(AF_INET, SOCK_STREAM, 0);
   dest.sin_family = AF_INET;
   dest.sin_port = htons(53);
   dest.sin_addr.s_addr = inet_addr("127.0.0.155");
   printf("\nSending Packet...");
-  if (sendto(sock, (char *)buf, data_len, 0, (struct sockaddr *)&dest,
-             sizeof(dest)) < 0) {
+  connect(sock, (struct sockaddr*)&dest, sizeof(dest));
+  if (send(sock, (char *)buf, data_len, 0) < 0) {
     perror("sendto failed");
   }
   printf("Done");
   int i = sizeof dest;
   printf("\nReceiving answer...");
-  if (recvfrom(sock, (char *)buf, 65536, 0, (struct sockaddr *)&dest,
-               (socklen_t *)&i) < 0) {
+  if (recv(sock, (char *)buf, 65536, 0) < 0) {
     perror("recvfrom failed");
   }
   printf("Done\n");

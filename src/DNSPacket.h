@@ -17,6 +17,8 @@
 #define Q_T_MX 15   // Mail server
 #define T_IN 1 // Internet
 #define TTL 360
+#define ROOT_SERVER_HOST "127.0.0.2"
+
 
 // Constant sized fields of the resource record structure
 #pragma pack(push, 1)
@@ -83,8 +85,6 @@ unsigned char *readDomainName(unsigned char *reader, unsigned char *buffer,
 void readDNSPacket(unsigned char *buf, DNS_Packet *packet);
 int addQuery(unsigned char *reader, Query *query);
 int addResRecord(unsigned char *reader, ResRecord *resRecord);
-void setDNSHeader(DNS_Header *header, uint16_t queryCount, uint16_t answerCount,
-                  uint16_t authorCount, uint16_t additionCount);
 void changeToDnsNameFormat(unsigned char *des, const unsigned char *host);
 void printPacket(DNS_Packet *packet);
 

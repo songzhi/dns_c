@@ -1,27 +1,5 @@
 #include "DNSPacket.h"
 
-uint16_t __ntons(uint16_t __hostshort) {
-  return __hostshort;
-}
-
-void setDNSHeader(DNS_Header *header, uint16_t queryCount, uint16_t answerCount,
-                  uint16_t authorCount, uint16_t additionCount) {
-  header->id = (unsigned short)htons(getpid());
-  header->qr = 0;     // This is a query
-  header->opcode = 0; // This is a standard query
-  header->aa = 0;     // Not Authoritative
-  header->tc = 0;     // This message is not truncated
-  header->rd = 1;     // Recursion Desired
-  header->ra = 0;     // Recursion not available
-  header->z = 0;
-  header->ad = 0;
-  header->cd = 0;
-  header->rcode = 0;
-  header->queryCount = htons(queryCount);
-  header->answerCount = htons(answerCount);
-  header->authorityCount = htons(authorCount);
-  header->additionalCount = htons(additionCount);
-}
 
 /*
  * This will convert www.baidu.com to 3www5baidu3com

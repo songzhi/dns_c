@@ -1,71 +1,95 @@
 #include "DNSPacket.h"
+#include "server.h"
 #include <glib-2.0/glib.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-GHashTable *readResRecords(const char *prefix) {
-  FILE *fp;
+char *RR_TYPES[32];
+
+unsigned char *getnshost(const unsigned char *name, const unsigned char *host) {
+  unsigned char *r_name = (unsigned char *)g_strreverse(g_strdup((char *)name));
+  unsigned char *r_host = (unsigned char *)g_strreverse(g_strdup((char *)host));
+  unsigned char *nshost = (unsigned char *)malloc(256);
+  int i;
+  int host_len = strlen((char *)host);
+  for (i = 0; i < host_len; i++) {
+    nshost[i] = r_name[i];
+  }
+  nshost[i++] = '.';
+  for (; r_name[i] != '.'; i++) {
+    nshost[i] = r_name[i];
+  }
+  return (unsigned char *)g_strreverse((char *)nshost);
+}
+
+int resolve(unsigned char *buf, DNS_Packet *packet, const char *serverHost,
+            GHashTable *tables) {
+  GList *answers = NULL, *authorities = NULL, *additionals = NULL;
+
+  Query *query = packet->Questions;
+  const char *rr_type = RR_TYPES[query->question->qtype];
+  if (g_hash_table_contains(tables, rr_type)) {
+    GHashTable *table = (GHashTable *)g_hash_table_lookup(tables, rr_type);
+    if (g_hash_table_contains(table, query->name)) {
+      answers = (GList *)g_hash_table_lookup(table, query->name);
+    }
+  } else {
+    if (packet->Header->rd == 0) { // 非递归
+      GHashTable *table =
+          (GHashTable *)g_hash_table_lookup(tables, RR_TYPES[Q_T_NS]);
+      unsigned char *nshost =
+          getnshost(query->name, (const unsigned char *)serverHost);
+      if (g_hash_table_contains(table, nshost)) {
+        authorities = (GList *)g_hash_table_lookup(table, nshost);
+        table = (GHashTable *)g_hash_table_lookup(tables, RR_TYPES[Q_T_A]);
+        additionals = (GList *)g_hash_table_lookup(
+            table, ((ResRecord *)authorities->data)->name);
+      }
+    }
+  }
+}
+
+void initRR_TYPES(void) {
+  RR_TYPES[Q_T_A] = g_strdup("A");
+  RR_TYPES[Q_T_NS] = g_strdup("NS");
+  RR_TYPES[Q_T_CNAME] = g_strdup("CNAME");
+  RR_TYPES[Q_T_SOA] = g_strdup("SOA");
+  RR_TYPES[Q_T_PTR] = g_strdup("PTR");
+  RR_TYPES[Q_T_MX] = g_strdup("MX");
+}
+
+void run(const char *prefix, char *host) {
+  GHashTable *RRTables, *_table;
   char filename[256] = "data/";
   strcat(filename, prefix);
   strcat(filename, ".txt");
-  fp = fopen(filename, "r");
-  if (fp == NULL) {
-    printf("打开资源记录文件失败");
-    exit(1);
-  }
-  GHashTable *RRTables = g_hash_table_new(g_str_hash, g_str_equal);
-  char *rr_types[5] = {"A", "CNAME", "MX", "NS", "PTR"};
-  for (int i = 0; i < 5; i++) {
-    g_hash_table_insert(RRTables, g_strdup(rr_types[i]),
-                        g_hash_table_new(g_str_hash, g_str_equal));
-  }
-  ResRecord *rr = (ResRecord *)malloc(sizeof(ResRecord));
-  rr->name = (unsigned char *)malloc(256);
-  rr->rdata = (unsigned char *)malloc(256);
-  rr->resource = (R_Data *)malloc(sizeof(R_Data));
-  char _class[8], _type[8];
-  GHashTable *_table;
-  while (fscanf(fp, "%s %d %s %s %s", rr->name, &rr->resource->ttl, _class,
-                _type, rr->rdata) != EOF) {
-    _table = (GHashTable *)g_hash_table_lookup(RRTables, _type);
-    g_hash_table_insert(_table, rr->name, rr);
-    rr = (ResRecord *)malloc(sizeof(ResRecord));
-    rr->name = (unsigned char *)malloc(256);
-    rr->rdata = (unsigned char *)malloc(256);
-    rr->resource = (R_Data *)malloc(sizeof(R_Data));
-  }
-  return RRTables;
-}
-GHashTable *readCacheFile(const char *prefix) {
-  GHashTable *table = g_hash_table_new(g_str_hash, g_str_equal);
-  FILE *fp;
-  char filename[256] = "data/";
-  strcat(filename, prefix);
-  strcat(filename, ".cache");
-  if ((fp = fopen(filename, "r")) == NULL) {
-    return table;
-  }
-  ResRecord *rr = (ResRecord *)malloc(sizeof(ResRecord));
-  rr->name = (unsigned char *)malloc(256);
-  rr->rdata = (unsigned char *)malloc(256);
-  rr->resource = (R_Data *)malloc(sizeof(R_Data));
-  char _class[8], _type[8];
-  while (fscanf(fp, "%s %d %s %s %s", rr->name, &rr->resource->ttl, _class,
-                _type, rr->rdata) != EOF) {
-    g_hash_table_insert(table, rr->name, rr);
-    rr = (ResRecord *)malloc(sizeof(ResRecord));
-    rr->name = (unsigned char *)malloc(256);
-    rr->rdata = (unsigned char *)malloc(256);
-    rr->resource = (R_Data *)malloc(sizeof(R_Data));
-  }
-  return table;
-}
-int run(const char *prefix, char *host) {
-
-  GHashTable *RRTables, *cacheTable, *_table;
-  RRTables = readResRecords(prefix);
-  cacheTable = readCacheFile(prefix);
+  RRTables = readResRecords(filename);
   _table = (GHashTable *)g_hash_table_lookup(RRTables, "A");
   printf("%d\n", g_hash_table_size(_table));
+
+  unsigned char buf[65536];
+  int s = socket(AF_INET, SOCK_DGRAM, 0);
+  struct sockaddr_in addr_serv;
+  addr_serv.sin_family = AF_INET;
+  addr_serv.sin_addr.s_addr = inet_addr(host);
+  addr_serv.sin_port = htons(53);
+  bind(s, (struct sockaddr *)&addr_serv, sizeof(addr_serv));
+  struct sockaddr_in dest;
+  int i = sizeof(dest);
+  printf("listhening\n");
+  while (1) {
+    int n = recvfrom(s, (char *)buf, 65536, 0, (struct sockaddr *)&dest,
+                     (socklen_t *)&i);
+    DNS_Packet packet;
+    readDNSPacket(buf, &packet);
+    printPacket(&packet);
+    // int data_len = setDNSPacket(buf, &packet);
+    sendto(s, (char *)buf, 655, 0, (struct sockaddr *)&dest, (socklen_t)i);
+  }
+}
+
+int main(void) {
+  initRR_TYPES();
+  run("root", ROOT_SERVER_HOST);
   return 0;
 }
