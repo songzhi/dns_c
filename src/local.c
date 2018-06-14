@@ -45,11 +45,12 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
   int n;
   DNS_Packet tld_packet;
   while (1) {
-    sendto(sock, tldbuf, data_len, 0, (struct sockaddr *)&root_addr_udp,
+    sendto(sock, tldbuf, packet->data_len, 0, (struct sockaddr *)&root_addr_udp,
            sin_size);
     n = recvfrom(sock, (char *)tldbuf, 65536, 0,
                  (struct sockaddr *)&root_addr_udp, (socklen_t *)&sin_size);
     if (IS_RECURSIVE) {
+      *(unsigned short *)(buf-2) = htons(n);
       memcpy(buf, tldbuf, n);
       data_len = n;
       break;
@@ -61,6 +62,7 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
         root_addr_udp.sin_addr.s_addr =
             inet_addr((const char *)tld_packet.Additional_RRs[0].rdata);
       } else {
+        *(unsigned short *)(buf-2) = htons(n);
         memcpy(buf, tldbuf, n);
         data_len = n;
         break;
@@ -81,7 +83,7 @@ int main(void) {
   local_addr.sin_port = htons(53);
 
   root_addr_udp.sin_family = AF_INET;
-  root_addr_udp.sin_addr.s_addr = inet_addr("127.0.0.2");
+  root_addr_udp.sin_addr.s_addr = inet_addr(ROOT_SERVER_HOST);
   root_addr_udp.sin_port = htons(53);
 
   if (bind(serverSock, (struct sockaddr *)&local_addr,
@@ -98,8 +100,9 @@ int main(void) {
     clientSock = accept(serverSock, (struct sockaddr *)&remote_addr, &sin_size);
     int n = recv(clientSock, buf, 65536, 0);
     DNS_Packet packet;
-    readDNSPacket(buf, &packet);
-    int data_len = resolve(buf, &packet);
+    readDNSPacket(buf+2, &packet);
+    printPacket(&packet);
+    int data_len = resolve(buf+2, &packet);
     send(clientSock, buf, data_len, 0);
   }
 }

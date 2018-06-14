@@ -29,13 +29,15 @@ int addQuery(unsigned char *reader, Query *query) {
 }
 
 int setDNSPacket(unsigned char *buf, Query *questions, int ques_count) {
-  DNS_Header *dns_header = (DNS_Header *)buf;
+  DNS_Header *dns_header = (DNS_Header *)buf+2;
   setDNSHeader(dns_header,getpid() ,ques_count);
   int ques_len = 0;
   for (int i = 0; i < ques_count; i++) {
     ques_len += addQuery(&buf[sizeof(DNS_Header) + ques_len], questions + i);
   }
-  return (int)sizeof(DNS_Header) + ques_len;
+  int data_len = (int)sizeof(DNS_Header) + ques_len;
+  *(unsigned short *)buf = htons(data_len);
+  return data_len;
 }
 
 void sendPacketAndGetResult(unsigned char *buf, int data_len) {
@@ -76,7 +78,7 @@ int main(void) {
   int data_len = setDNSPacket(buf, questions, ques_count);
   sendPacketAndGetResult(buf, data_len);
   DNS_Packet packet;
-  readDNSPacket(buf, &packet);
+  readDNSPacket(buf+2, &packet);
   printPacket(&packet);
   return 0;
 }

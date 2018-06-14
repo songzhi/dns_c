@@ -1,6 +1,6 @@
 #include "DNSPacket.h"
 #include <glib-2.0/glib.h>
-int addResRecord(unsigned char *reader, ResRecord *resRecord);
+int _addResRecord(unsigned char *reader, ResRecord *resRecord);
 int addResRecord_MX(unsigned char *reader, const char *name, int ttl,
                     unsigned short preference, const char *exchange);
 int addResRecord_A(unsigned char *reader, const char *name, int ttl,

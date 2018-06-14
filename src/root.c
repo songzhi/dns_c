@@ -6,6 +6,23 @@
 
 char *RR_TYPES[32];
 
+int addResRecord(unsigned char *reader, ResRecord *rr) {
+  switch (rr->resource->type) {
+  case Q_T_A:
+    return addResRecord_A(reader, (const char *)rr->name, rr->resource->ttl, (const char *)rr->rdata);
+    break;
+  case Q_T_CNAME:
+    return addResRecord_CNAME(reader, (const char *)rr->name, rr->resource->ttl, (const char *)rr->rdata);
+    break;
+  case Q_T_MX:
+    return addResRecord_MX(reader, (const char *)rr->name, rr->resource->ttl, 5, (const char *)rr->rdata);
+    break;
+  case Q_T_NS:
+    return addResRecord_NS(reader, (const char *)rr->name, rr->resource->ttl, (const char *)rr->rdata);
+    break;
+  }
+}
+
 unsigned char *getnshost(const unsigned char *name, const unsigned char *host) {
   unsigned char *r_name = (unsigned char *)g_strreverse(g_strdup((char *)name));
   unsigned char *r_host = (unsigned char *)g_strreverse(g_strdup((char *)host));
@@ -34,19 +51,45 @@ int resolve(unsigned char *buf, DNS_Packet *packet, const char *serverHost,
       answers = (GList *)g_hash_table_lookup(table, query->name);
     }
   } else {
-    if (packet->Header->rd == 0) { // 非递归
-      GHashTable *table =
-          (GHashTable *)g_hash_table_lookup(tables, RR_TYPES[Q_T_NS]);
-      unsigned char *nshost =
-          getnshost(query->name, (const unsigned char *)serverHost);
-      if (g_hash_table_contains(table, nshost)) {
-        authorities = (GList *)g_hash_table_lookup(table, nshost);
-        table = (GHashTable *)g_hash_table_lookup(tables, RR_TYPES[Q_T_A]);
-        additionals = (GList *)g_hash_table_lookup(
-            table, ((ResRecord *)authorities->data)->name);
-      }
+    GHashTable *table =
+        (GHashTable *)g_hash_table_lookup(tables, RR_TYPES[Q_T_NS]);
+    unsigned char *nshost =
+        getnshost(query->name, (const unsigned char *)serverHost);
+    if (g_hash_table_contains(table, nshost)) {
+      authorities = (GList *)g_hash_table_lookup(table, nshost);
+      table = (GHashTable *)g_hash_table_lookup(tables, RR_TYPES[Q_T_A]);
+      additionals = (GList *)g_hash_table_lookup(
+          table, ((ResRecord *)authorities->data)->name);
     }
   }
+
+  DNS_Header *header = (DNS_Header *)buf;
+  int data_len = sizeof(DNS_Header);
+  unsigned char *reader = buf + data_len;
+  int ansCount = 0, authCount = 0, addiCount = 0;
+  if (answers != NULL) {
+    for (GList *node = answers; node != NULL;
+         node = g_list_next(node), ansCount++) {
+      ResRecord *rr = (ResRecord *)node->data;
+      data_len += addResRecord(reader, rr);
+      reader = buf + data_len;
+    }
+  } else if (authorities != NULL) {
+    for (GList *node = authorities; node != NULL;
+         node = g_list_next(node), authCount++) {
+      ResRecord *rr = (ResRecord *)node->data;
+      data_len += addResRecord(reader, rr);
+      reader = buf + data_len;
+    }
+    for (GList *node = additionals; node != NULL;
+         node = g_list_next(node), addiCount++) {
+      ResRecord *rr = (ResRecord *)node->data;
+      data_len += addResRecord(reader, rr);
+      reader = buf + data_len;
+    }
+  }
+  setDNSHeader(header, ansCount, authCount, packet->Header->rd, addiCount);
+  return data_len;
 }
 
 void initRR_TYPES(void) {
@@ -64,8 +107,8 @@ void run(const char *prefix, char *host) {
   strcat(filename, prefix);
   strcat(filename, ".txt");
   RRTables = readResRecords(filename);
-  _table = (GHashTable *)g_hash_table_lookup(RRTables, "A");
-  printf("%d\n", g_hash_table_size(_table));
+
+  initRR_TYPES();
 
   unsigned char buf[65536];
   int s = socket(AF_INET, SOCK_DGRAM, 0);
@@ -83,8 +126,8 @@ void run(const char *prefix, char *host) {
     DNS_Packet packet;
     readDNSPacket(buf, &packet);
     printPacket(&packet);
-    // int data_len = setDNSPacket(buf, &packet);
-    sendto(s, (char *)buf, 655, 0, (struct sockaddr *)&dest, (socklen_t)i);
+    int data_len = resolve(buf, &packet, prefix, RRTables);
+    sendto(s, (char *)buf, data_len, 0, (struct sockaddr *)&dest, (socklen_t)i);
   }
 }
 

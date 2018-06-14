@@ -77,6 +77,7 @@ typedef struct DNS_Packet {
   ResRecord *Answer_RRs;
   ResRecord *Authority_RRs;
   ResRecord *Additional_RRs;
+  int data_len;
 } DNS_Packet;
 
 

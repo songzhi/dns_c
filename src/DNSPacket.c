@@ -77,6 +77,7 @@ void readDNSPacket(unsigned char *buf, DNS_Packet *packet) {
       answers[i].rdata = readDomainName(reader, buf, &stop);
       reader = reader + stop;
     }
+    packet->data_len = reader - buf;
   }
 
   // read authorities

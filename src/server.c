@@ -10,6 +10,11 @@ void setDNSHeader(DNS_Header *header, uint16_t answerCount, uint16_t authCount, 
   header->answerCount = htons(answerCount);
   header->authorityCount = htons(authCount);
   header->additionalCount = htons(addCount);
+  if (answerCount + authCount+addCount ==0) {
+    header->rcode = 3;
+  } else {
+    header->rcode = 0;
+  }
 }
 
 int addQuery(unsigned char *reader, Query *query) {
@@ -22,7 +27,7 @@ int addQuery(unsigned char *reader, Query *query) {
   return qname_len + (int)sizeof(Question);
 }
 
-int addResRecord(unsigned char *reader, ResRecord *resRecord) {
+int _addResRecord(unsigned char *reader, ResRecord *resRecord) {
   unsigned char *name = reader;
   changeToDnsNameFormat(name, resRecord->name);
   int name_len = strlen((const char *)name) + 1;
@@ -49,7 +54,7 @@ int addResRecord_A(unsigned char *reader, const char *name, int ttl,
   res_record.rdata = (unsigned char *)malloc(4);
   long *p = (long *)res_record.rdata;
   *p = inet_addr(address);
-  return addResRecord(reader, &res_record);
+  return _addResRecord(reader, &res_record);
 }
 
 int addResRecord_CNAME(unsigned char *reader, const char *name, int ttl,
@@ -65,7 +70,7 @@ int addResRecord_CNAME(unsigned char *reader, const char *name, int ttl,
   res_record.rdata =
       (unsigned char *)malloc(res_record.resource->data_len + 10);
   changeToDnsNameFormat(res_record.rdata, (unsigned char *)cname);
-  return addResRecord(reader, &res_record);
+  return _addResRecord(reader, &res_record);
 }
 
 int addResRecord_NS(unsigned char *reader, const char *name, int ttl,
@@ -81,7 +86,7 @@ int addResRecord_NS(unsigned char *reader, const char *name, int ttl,
   res_record.rdata =
       (unsigned char *)malloc(res_record.resource->data_len + 10);
   changeToDnsNameFormat(res_record.rdata, (unsigned char *)cname);
-  return addResRecord(reader, &res_record);
+  return _addResRecord(reader, &res_record);
 }
 
 int addResRecord_MX(unsigned char *reader, const char *name, int ttl,
@@ -99,7 +104,7 @@ int addResRecord_MX(unsigned char *reader, const char *name, int ttl,
   unsigned short *p = (unsigned short *)res_record.rdata;
   *p = htons(preference);
   changeToDnsNameFormat(res_record.rdata + 2, (unsigned char *)exchange);
-  return addResRecord(reader, &res_record);
+  return _addResRecord(reader, &res_record);
 }
 
 GHashTable *readResRecords(const char *filename) {
