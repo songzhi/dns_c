@@ -133,6 +133,7 @@ GHashTable *readResRecords(const char *filename) {
                       ? (GList *)g_hash_table_lookup(_table, rr->name)
                       : NULL;
     list = g_list_prepend(list, rr);
+    j
     g_hash_table_insert(_table, rr->name, list);
 
     rr = (ResRecord *)malloc(sizeof(ResRecord));

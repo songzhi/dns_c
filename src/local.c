@@ -35,34 +35,37 @@ GHashTable *readCacheFile(const char *prefix) {
 int resolve(unsigned char *buf, DNS_Packet *packet) {
   unsigned char tldbuf[65536];
   memcpy(tldbuf, buf, 65536);
-  int data_len = sizeof(DNS_Header);
+  int data_len = packet->data_len;
   struct sockaddr_in root_addr_udp;
   int sock = socket(AF_INET, SOCK_DGRAM, 0);
   root_addr_udp.sin_family = AF_INET;
   root_addr_udp.sin_addr.s_addr = inet_addr(ROOT_SERVER_HOST);
-  root_addr_udp.sin_port = htons(53);
+  root_addr_udp.sin_port = htons(SERVER_PORT);
   socklen_t sin_size = sizeof(struct sockaddr_in);
   int n;
   DNS_Packet tld_packet;
   while (1) {
-    sendto(sock, tldbuf, packet->data_len, 0, (struct sockaddr *)&root_addr_udp,
+    printf("sending to root...");
+    DNS_Header *header = (DNS_Header *)tldbuf;
+    header->rd = htons(IS_RECURSIVE);
+    sendto(sock, tldbuf, data_len, 0, (struct sockaddr *)&root_addr_udp,
            sin_size);
+    printf("Done\nreceiving from root...");
     n = recvfrom(sock, (char *)tldbuf, 65536, 0,
-                 (struct sockaddr *)&root_addr_udp, (socklen_t *)&sin_size);
+                 (struct sockaddr *)&root_addr_udp, &sin_size);
+    printf("Done\n");
+
     if (IS_RECURSIVE) {
-      *(unsigned short *)(buf-2) = htons(n);
       memcpy(buf, tldbuf, n);
       data_len = n;
-      break;
     } else {
       readDNSPacket(tldbuf, &tld_packet);
       printPacket(&tld_packet);
-      if (tld_packet.Header->rcode == 1 &&
+      if (tld_packet.Header->rcode == 0 &&
           tld_packet.Header->answerCount == 0) {
         root_addr_udp.sin_addr.s_addr =
             inet_addr((const char *)tld_packet.Additional_RRs[0].rdata);
       } else {
-        *(unsigned short *)(buf-2) = htons(n);
         memcpy(buf, tldbuf, n);
         data_len = n;
         break;
@@ -74,17 +77,13 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
 
 int main(void) {
   unsigned char buf[65536];
-  int serverSock, clientSock, udpSock;
-  struct sockaddr_in local_addr, remote_addr, root_addr_udp;
+  int serverSock, clientSock;
+  struct sockaddr_in local_addr, remote_addr;
   serverSock = socket(AF_INET, SOCK_STREAM, 0);
-  udpSock = socket(AF_INET, SOCK_DGRAM, 0);
   local_addr.sin_family = AF_INET;
-  local_addr.sin_addr.s_addr = inet_addr("127.0.0.155");
-  local_addr.sin_port = htons(53);
+  local_addr.sin_addr.s_addr = inet_addr(LOCAL_SERVER_HOST);
+  local_addr.sin_port = htons(SERVER_PORT);
 
-  root_addr_udp.sin_family = AF_INET;
-  root_addr_udp.sin_addr.s_addr = inet_addr(ROOT_SERVER_HOST);
-  root_addr_udp.sin_port = htons(53);
 
   if (bind(serverSock, (struct sockaddr *)&local_addr,
            sizeof(struct sockaddr)) == -1) {
@@ -94,7 +93,8 @@ int main(void) {
     perror("listhen failed:");
   }
 
-  printf("listhening\n");
+  printf("Listhening:\n");
+
   socklen_t sin_size = sizeof(struct sockaddr_in);
   while (1) {
     clientSock = accept(serverSock, (struct sockaddr *)&remote_addr, &sin_size);
@@ -103,6 +103,7 @@ int main(void) {
     readDNSPacket(buf+2, &packet);
     printPacket(&packet);
     int data_len = resolve(buf+2, &packet);
+    *(unsigned short *)buf = htons(data_len);
     send(clientSock, buf, data_len, 0);
   }
 }

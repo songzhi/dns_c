@@ -29,14 +29,13 @@ int addQuery(unsigned char *reader, Query *query) {
 }
 
 int setDNSPacket(unsigned char *buf, Query *questions, int ques_count) {
-  DNS_Header *dns_header = (DNS_Header *)buf+2;
-  setDNSHeader(dns_header,getpid() ,ques_count);
+  DNS_Header *dns_header = (DNS_Header *)buf;
+  setDNSHeader(dns_header, getpid(), ques_count);
   int ques_len = 0;
   for (int i = 0; i < ques_count; i++) {
     ques_len += addQuery(&buf[sizeof(DNS_Header) + ques_len], questions + i);
   }
   int data_len = (int)sizeof(DNS_Header) + ques_len;
-  *(unsigned short *)buf = htons(data_len);
   return data_len;
 }
 
@@ -44,10 +43,10 @@ void sendPacketAndGetResult(unsigned char *buf, int data_len) {
   struct sockaddr_in dest;
   int sock = socket(AF_INET, SOCK_STREAM, 0);
   dest.sin_family = AF_INET;
-  dest.sin_port = htons(53);
-  dest.sin_addr.s_addr = inet_addr("127.0.0.155");
+  dest.sin_port = htons(SERVER_PORT);
+  dest.sin_addr.s_addr = inet_addr(LOCAL_SERVER_HOST);
   printf("\nSending Packet...");
-  connect(sock, (struct sockaddr*)&dest, sizeof(dest));
+  connect(sock, (struct sockaddr *)&dest, sizeof(dest));
   if (send(sock, (char *)buf, data_len, 0) < 0) {
     perror("sendto failed");
   }
@@ -75,10 +74,11 @@ int main(void) {
     questions[i].question->qclass = 1;
   }
   unsigned char buf[65536];
-  int data_len = setDNSPacket(buf, questions, ques_count);
+  int data_len = setDNSPacket(buf+2, questions, ques_count);
+  *(unsigned short *)buf = htons(data_len);
   sendPacketAndGetResult(buf, data_len);
   DNS_Packet packet;
   readDNSPacket(buf+2, &packet);
-  printPacket(&packet);
+  printPacket(&packet);               
   return 0;
 }
