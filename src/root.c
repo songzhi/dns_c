@@ -7,6 +7,9 @@
 char *RR_TYPES[32];
 
 int addResRecord(unsigned char *reader, ResRecord *rr) {
+  unsigned char *name = (unsigned char *)malloc(256);
+  changeToDnsNameFormat(name, rr->name);
+  rr->name = name;
   switch (rr->resource->type) {
     case Q_T_A:
       return addResRecord_A(reader, (const char *) rr->name, rr->resource->ttl, (const char *) rr->rdata);

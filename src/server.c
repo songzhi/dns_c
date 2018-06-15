@@ -133,7 +133,17 @@ GHashTable *readResRecords(const char *filename) {
                       ? (GList *)g_hash_table_lookup(_table, rr->name)
                       : NULL;
     list = g_list_prepend(list, rr);
-    j
+    if (strcmp(_type, "MX") == 0) {
+      rr->resource->type = Q_T_MX;
+    } else if (strcmp(_type, "A") == 0) {
+      rr->resource->type = Q_T_A;
+    } else if (strcmp(_type, "CNAME") == 0) {
+      rr->resource->type = Q_T_CNAME;
+    } else if (strcmp(_type, "PTR") == 0) {
+      rr->resource->type = Q_T_PTR;
+    }else if (strcmp(_type, "NS") == 0) {
+      rr->resource->type = Q_T_NS;
+    }
     g_hash_table_insert(_table, rr->name, list);
 
     rr = (ResRecord *)malloc(sizeof(ResRecord));
