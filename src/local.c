@@ -2,7 +2,7 @@
 #include <glib-2.0/glib.h>
 
 int IS_RECURSIVE = 0;
-
+GHashTable *CACHE_TABLES;
 GHashTable *readCacheFile(const char *prefix) {
   GHashTable *table = g_hash_table_new(g_str_hash, g_str_equal);
   FILE *fp;
@@ -77,6 +77,7 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
 
 int main(void) {
   unsigned char buf[65536];
+  CACHE_TABLES = readCacheFile("local");
   int serverSock, clientSock;
   struct sockaddr_in local_addr, remote_addr;
   serverSock = socket(AF_INET, SOCK_STREAM, 0);
@@ -104,6 +105,6 @@ int main(void) {
     printPacket(&packet);
     int data_len = resolve(buf+2, &packet);
     *(unsigned short *)buf = htons(data_len);
-    send(clientSock, buf, data_len, 0);
+    send(clientSock, buf, data_len+2, 0);
   }
 }

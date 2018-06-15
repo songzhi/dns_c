@@ -8,20 +8,19 @@ char *RR_TYPES[32];
 
 int addResRecord(unsigned char *reader, ResRecord *rr) {
   unsigned char *name = (unsigned char *)malloc(256);
-  changeToDnsNameFormat(name, rr->name);
-  rr->name = name;
+  strcpy(name, rr->name);
   switch (rr->resource->type) {
     case Q_T_A:
-      return addResRecord_A(reader, (const char *) rr->name, rr->resource->ttl, (const char *) rr->rdata);
+      return addResRecord_A(reader, (const char *) name, rr->resource->ttl, (const char *) rr->rdata);
       break;
     case Q_T_CNAME:
-      return addResRecord_CNAME(reader, (const char *) rr->name, rr->resource->ttl, (const char *) rr->rdata);
+      return addResRecord_CNAME(reader, (const char *) name, rr->resource->ttl, (const char *) rr->rdata);
       break;
     case Q_T_MX:
-      return addResRecord_MX(reader, (const char *) rr->name, rr->resource->ttl, 5, (const char *) rr->rdata);
+      return addResRecord_MX(reader, (const char *) name, rr->resource->ttl, 5, (const char *) rr->rdata);
       break;
     case Q_T_NS:
-      return addResRecord_NS(reader, (const char *) rr->name, rr->resource->ttl, (const char *) rr->rdata);
+      return addResRecord_NS(reader, (const char *) name, rr->resource->ttl, (const char *) rr->rdata);
       break;
   }
 }
@@ -92,7 +91,7 @@ int resolve(unsigned char *buf, DNS_Packet *packet, const char *serverHost,
   int data_len = sizeof(DNS_Header);
   unsigned char *reader = buf + data_len;
   for (int i=0;i<ntohs(packet->Header->queryCount);i++) {
-    data_len += strlen(query[i].name) + sizeof(Question) + 1;
+    data_len += addQuery(reader, query+i);
     reader = buf + data_len;
   }
   int ansCount = 0, authCount = 0, addiCount = 0;
