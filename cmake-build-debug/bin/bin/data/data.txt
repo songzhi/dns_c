@@ -1,0 +1,3 @@
+美国 86400 IN NS dns.美国
+商业 86400 IN NS dns.商业
+组织 86400 IN NS dns.组织

@@ -11,5 +11,8 @@ int addResRecord_CNAME(unsigned char *reader, const char *name, int ttl,
 int addQuery(unsigned char *reader, Query *query);
 int addResRecord_NS(unsigned char *reader, const char *name, int ttl,
                     const char *cname);
+int addResRecord_PTR(unsigned char *reader, const char *name, int ttl,
+                     const char *cname);
 void setDNSHeader(DNS_Header *header, uint16_t answerCount, uint16_t authCount, uint16_t recursionDesired,uint16_t addCount);
 GHashTable *readResRecords(const char *filename);
+void initRR_TYPES(void);

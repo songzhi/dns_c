@@ -3,6 +3,7 @@
 
 void setDNSHeader(DNS_Header *header, uint16_t answerCount, uint16_t authCount, uint16_t recursionDesired,
                   uint16_t addCount) {
+  // 因为这个函数只在服务器端使用，所以有些字段不用设置
   header->qr = 1;     // This is a response
   header->opcode = 0; // This is a standard query
   header->aa = 1;     // Not Authoritative
@@ -63,7 +64,7 @@ int addResRecord_CNAME(unsigned char *reader, const char *name, int ttl,
   res_record.name = (unsigned char *)malloc(256);
   strcpy((char *)res_record.name, (char *)name);
   res_record.resource = (R_Data *)malloc(sizeof(R_Data));
-  res_record.resource->data_len = strlen((char *)cname) + 2;
+  res_record.resource->data_len = strlen((char *)cname) + 2; // 转换格式之后长度加二
   res_record.resource->ttl = ttl;
   res_record.resource->type = Q_T_CNAME;
   res_record.resource->_class = T_IN;
@@ -79,7 +80,7 @@ int addResRecord_NS(unsigned char *reader, const char *name, int ttl,
   res_record.name = (unsigned char *)malloc(256);
   strcpy((char *)res_record.name, (char *)name);
   res_record.resource = (R_Data *)malloc(sizeof(R_Data));
-  res_record.resource->data_len = strlen((char *)cname) + 2;
+  res_record.resource->data_len = strlen((char *)cname) + 2; // 转换格式之后长度加二
   res_record.resource->ttl = ttl;
   res_record.resource->type = Q_T_NS;
   res_record.resource->_class = T_IN;
@@ -95,7 +96,7 @@ int addResRecord_MX(unsigned char *reader, const char *name, int ttl,
   res_record.name = (unsigned char *)malloc(256);
   strcpy((char *)res_record.name, (char *)name);
   res_record.resource = (R_Data *)malloc(sizeof(R_Data));
-  res_record.resource->data_len = strlen((char *)exchange) + 2 + 2;
+  res_record.resource->data_len = strlen((char *)exchange) + 2 + 2; // exchange转换格式之后长度加二，另一个2是preference
   res_record.resource->ttl = ttl;
   res_record.resource->type = Q_T_MX;
   res_record.resource->_class = T_IN;
@@ -107,14 +108,32 @@ int addResRecord_MX(unsigned char *reader, const char *name, int ttl,
   return _addResRecord(reader, &res_record);
 }
 
+int addResRecord_PTR(unsigned char *reader, const char *name, int ttl,
+                       const char *cname) {
+  ResRecord res_record;
+  res_record.name = (unsigned char *)malloc(256);
+  strcpy((char *)res_record.name, (char *)name);
+  res_record.resource = (R_Data *)malloc(sizeof(R_Data));
+  res_record.resource->data_len = strlen((char *)cname) + 2; // 转换格式之后长度加二
+  res_record.resource->ttl = ttl;
+  res_record.resource->type = Q_T_PTR;
+  res_record.resource->_class = T_IN;
+  res_record.rdata =
+          (unsigned char *)malloc(res_record.resource->data_len + 10);
+  changeToDnsNameFormat(res_record.rdata, (unsigned char *)cname);
+  return _addResRecord(reader, &res_record);
+}
+
 GHashTable *readResRecords(const char *filename) {
+  // 从文件里读取资源记录，保存到一张hash表里。
+  // key是几种资源的类型，value是hash表，其维护对应类型的所有资源记录
   FILE *fp;
+  GHashTable *RRTables = g_hash_table_new(g_str_hash, g_str_equal);
   fp = fopen(filename, "r");
   if (fp == NULL) {
-    printf("打开资源记录文件失败");
-    exit(1);
+    printf("资源记录文件不存在\n");
+    return RRTables;
   }
-  GHashTable *RRTables = g_hash_table_new(g_str_hash, g_str_equal);
   char *rr_types[5] = {"A", "CNAME", "MX", "NS", "PTR"};
   for (int i = 0; i < 5; i++) {
     g_hash_table_insert(RRTables, g_strdup(rr_types[i]),
@@ -153,3 +172,4 @@ GHashTable *readResRecords(const char *filename) {
   }
   return RRTables;
 }
+

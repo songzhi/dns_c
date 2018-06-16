@@ -1,36 +1,9 @@
 #include "server.h"
-#include <glib-2.0/glib.h>
 
 int IS_RECURSIVE = 0;
 GHashTable *CACHE_TABLES;
-GHashTable *readCacheFile(const char *prefix) {
-  GHashTable *table = g_hash_table_new(g_str_hash, g_str_equal);
-  FILE *fp;
-  char filename[256] = "data/";
-  strcat(filename, prefix);
-  strcat(filename, ".cache");
-  if ((fp = fopen(filename, "r")) == NULL) {
-    return table;
-  }
-  ResRecord *rr = (ResRecord *)malloc(sizeof(ResRecord));
-  rr->name = (unsigned char *)malloc(256);
-  rr->rdata = (unsigned char *)malloc(256);
-  rr->resource = (R_Data *)malloc(sizeof(R_Data));
-  char _class[8], _type[8];
-  while (fscanf(fp, "%s %d %s %s %s", rr->name, &rr->resource->ttl, _class,
-                _type, rr->rdata) != EOF) {
-    GList *list = g_hash_table_contains(table, rr->name)
-                      ? (GList *)g_hash_table_lookup(table, rr->name)
-                      : NULL;
-    list = g_list_prepend(list, rr);
-    g_hash_table_insert(table, rr->name, list);
-    rr = (ResRecord *)malloc(sizeof(ResRecord));
-    rr->name = (unsigned char *)malloc(256);
-    rr->rdata = (unsigned char *)malloc(256);
-    rr->resource = (R_Data *)malloc(sizeof(R_Data));
-  }
-  return table;
-}
+FILE *CACHE_FP;
+char *RR_TYPES[32];
 
 int resolve(unsigned char *buf, DNS_Packet *packet) {
   unsigned char tldbuf[65536];
@@ -45,12 +18,12 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
   int n;
   DNS_Packet tld_packet;
   while (1) {
-    printf("sending to root...");
+    printf("Sending to %s...", inet_ntoa(root_addr_udp.sin_addr));
     DNS_Header *header = (DNS_Header *)tldbuf;
     header->rd = htons(IS_RECURSIVE);
     sendto(sock, tldbuf, data_len, 0, (struct sockaddr *)&root_addr_udp,
            sin_size);
-    printf("Done\nreceiving from root...");
+    printf("Done\nReceiving from %s...", inet_ntoa(root_addr_udp.sin_addr));
     n = recvfrom(sock, (char *)tldbuf, 65536, 0,
                  (struct sockaddr *)&root_addr_udp, &sin_size);
     printf("Done\n");
@@ -63,9 +36,16 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
       printPacket(&tld_packet);
       if (tld_packet.Header->rcode == 0 &&
           tld_packet.Header->answerCount == 0) {
-        root_addr_udp.sin_addr.s_addr =
-            inet_addr((const char *)tld_packet.Additional_RRs[0].rdata);
+        printf("正向别的服务器查询\n");
+        root_addr_udp.sin_addr.s_addr = *(long *)tld_packet.Additional_RRs[0].rdata;
       } else {
+        if (tld_packet.Header->rcode == 0) { // 缓存成功的查询
+          for (int i=0;i<ntohs(tld_packet.Header->answerCount);i++) {
+            ResRecord *rr = tld_packet.Answer_RRs+i;
+            fprintf(CACHE_FP, "%s %d %s %s %s\n", rr->name, rr->resource->ttl, "IN",
+                    RR_TYPES[ntohs(rr->resource->type)], rr->rdata);
+          }
+        }
         memcpy(buf, tldbuf, n);
         data_len = n;
         break;
@@ -75,9 +55,23 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
   return data_len;
 }
 
+void initRR_TYPES(void) {
+  RR_TYPES[Q_T_A] = g_strdup("A");
+  RR_TYPES[Q_T_NS] = g_strdup("NS");
+  RR_TYPES[Q_T_CNAME] = g_strdup("CNAME");
+  RR_TYPES[Q_T_SOA] = g_strdup("SOA");
+  RR_TYPES[Q_T_PTR] = g_strdup("PTR");
+  RR_TYPES[Q_T_MX] = g_strdup("MX");
+}
+
 int main(void) {
   unsigned char buf[65536];
-  CACHE_TABLES = readCacheFile("local");
+  initRR_TYPES();
+  CACHE_TABLES = readResRecords("data/local.cache");
+  CACHE_FP = fopen("data/local.cache", "a");
+  if (CACHE_FP == NULL) {
+    printf("打开缓存文件失败\n");
+  }
   int serverSock, clientSock;
   struct sockaddr_in local_addr, remote_addr;
   serverSock = socket(AF_INET, SOCK_STREAM, 0);
@@ -102,6 +96,7 @@ int main(void) {
     int n = recv(clientSock, buf, 65536, 0);
     DNS_Packet packet;
     readDNSPacket(buf+2, &packet);
+    printf("收到");
     printPacket(&packet);
     int data_len = resolve(buf+2, &packet);
     *(unsigned short *)buf = htons(data_len);

@@ -1,9 +1,8 @@
 #include "DNSPacket.h"
 
-/*
- * This will convert www.baidu.com to 3www5baidu3com
- * */
+
 void changeToDnsNameFormat(unsigned char *des, const unsigned char *host) {
+  // This will convert www.baidu.com to 3www5baidu3com
   int lock = 0, i;
   int host_len = strlen((char *) host);
   unsigned char *_host =
@@ -120,62 +119,66 @@ void readDNSPacket(unsigned char *buf, DNS_Packet *packet) {
 }
 
 void printPacket(DNS_Packet *packet) {
-  // print answers
+  // Print DNS Packet
 
   DNS_Header *dns_header = packet->Header;
-  printf("Packet:  ");
+  printf("\n报文 ");
   switch (dns_header->rcode) {
     case 0:
-      printf("status:OK");
+      printf("状态:OK");
       break;
     case 1:
-      printf("status:查询格式错误");
+      printf("状态:查询格式错误");
       break;
     case 2:
-      printf("status:服务器内部错误");
+      printf("状态:服务器内部错误");
       break;
     case 3:
-      printf("status:名字不存在");
+      printf("状态:名字不存在");
       break;
   }
   switch (dns_header->rd) {
     case 0:
-      printf(" 非递归查询\n");
+      printf("(非递归查询)\n");
       break;
     case 1:
-      printf(" 递归查询\n");
+      printf("(递归查询)\n");
       break;
   }
 
   Query *queries = packet->Questions;
   printf("Queries : %d \n", ntohs(dns_header->queryCount));
   for (int i = 0; i < ntohs(dns_header->queryCount); i++) {
-    printf("  Name:%s Type:%d \n", queries[i].name,
+    printf("  Name: %s Type:%d \n", queries[i].name,
            ntohs(queries[i].question->qtype));
   }
 
   ResRecord *answers = packet->Answer_RRs;
-  printf("Answer Records : %d \n", ntohs(dns_header->answerCount));
+  printf("Answer Records: %d \n", ntohs(dns_header->answerCount));
   for (int i = 0; i < ntohs(dns_header->answerCount); i++) {
-    printf("  Name : %s ", answers[i].name);
+    printf("  Name: %s ", answers[i].name);
 
     if (ntohs(answers[i].resource->type) == Q_T_A) {
       long *p;
       p = (long *) answers[i].rdata;
       struct sockaddr_in a;
       a.sin_addr.s_addr = (*p); // working without ntohl
-      printf("has IPv4 address : %s", inet_ntoa(a.sin_addr));
+      printf("has IPv4 address: %s", inet_ntoa(a.sin_addr));
     }
 
     if (ntohs(answers[i].resource->type) == Q_T_MX) {
       // Canonical name for an alias
-      printf("has mail exchange : %s（preference: %d）", answers[i].rdata + 2,
+      printf("has mail exchange: %s（preference: %d）", answers[i].rdata + 2,
              ntohs(*(unsigned short *) answers[i].rdata));
     }
 
     if (ntohs(answers[i].resource->type) == Q_T_CNAME) {
       // Canonical name for an alias
-      printf("has alias name : %s", answers[i].rdata);
+      printf("has alias name: %s", answers[i].rdata);
+    }
+
+    if (ntohs(answers[i].resource->type) == Q_T_PTR) {
+      printf("has host name: %s", answers[i].rdata);
     }
 
     printf("\n");
@@ -183,34 +186,35 @@ void printPacket(DNS_Packet *packet) {
 
   // print authorities
   ResRecord *auth = packet->Authority_RRs;
-  printf("Authoritive Records : %d \n", ntohs(dns_header->authorityCount));
+  printf("Authoritive Records: %d \n", ntohs(dns_header->authorityCount));
   for (int i = 0; i < ntohs(dns_header->authorityCount); i++) {
 
-    printf("  Name : %s ", auth[i].name);
+    printf("  Name: %s ", auth[i].name);
     if (ntohs(auth[i].resource->type) == 2) {
-      printf("has nameserver : %s", auth[i].rdata);
+      printf("has nameserver: %s", auth[i].rdata);
     }
     printf("\n");
   }
 
   // print additional resource records
   ResRecord *addit = packet->Additional_RRs;
-  printf("Additional Records : %d \n", ntohs(dns_header->additionalCount));
+  printf("Additional Records: %d \n", ntohs(dns_header->additionalCount));
   for (int i = 0; i < ntohs(dns_header->additionalCount); i++) {
-    printf("  Name : %s ", addit[i].name);
+    printf("  Name: %s ", addit[i].name);
     if (ntohs(addit[i].resource->type) == 1) {
       long *p;
       p = (long *) addit[i].rdata;
       struct sockaddr_in a;
       a.sin_addr.s_addr = (*p);
-      printf("has IPv4 address : %s", inet_ntoa(a.sin_addr));
+      printf("has IPv4 address: %s", inet_ntoa(a.sin_addr));
     }
-    printf("\n");
+    printf("\n\n");
   }
 }
 
 unsigned char *readDomainName(unsigned char *reader, unsigned char *buffer,
                               int *count) {
+  // convert 3www5baidu3com0 to www.baidu.com
   unsigned char *name;
   unsigned int p = 0;
   int i, j;
@@ -219,7 +223,6 @@ unsigned char *readDomainName(unsigned char *reader, unsigned char *buffer,
   name = (unsigned char *) malloc(256);
   strcpy((char *) name, (const char *) reader);
 
-  // now convert 3www5baidu3com0 to www.baidu.com
   for (i = 0; i < (int) strlen((const char *) name); i++) {
     p = name[i];
     for (j = 0; j < (int) p; j++) {

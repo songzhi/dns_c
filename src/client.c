@@ -69,8 +69,11 @@ int main(void) {
     questions[i].question = (Question *)malloc(sizeof(Question));
     printf("域名:");
     scanf("%s", questions[i].name);
-    printf("类型(A:1\\MS:15\\CNAME:5):");
+    printf("类型(A:1\\MS:15\\CNAME:5\\PTR:12):");
     scanf("%hu", &(questions[i].question->qtype));
+    if (questions[i].question->qtype == Q_T_PTR) {
+      strcat(questions[i].name, ".in-addr.arpa");
+    }
     questions[i].question->qclass = 1;
   }
   unsigned char buf[65536];
