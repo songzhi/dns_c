@@ -19,7 +19,7 @@
 #define TTL 360
 #define ROOT_SERVER_HOST "127.0.0.2"
 #define LOCAL_SERVER_HOST "127.0.0.169"
-#define SERVER_PORT 8889
+#define SERVER_PORT 53
 
 // Constant sized fields of the resource record structure
 #pragma pack(push, 1)

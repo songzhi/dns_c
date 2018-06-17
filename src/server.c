@@ -24,7 +24,7 @@ int addQuery(unsigned char *reader, Query *query) {
   int qname_len = strlen((const char *)qname) + 1;
   Question *qinfo = (Question *)&reader[qname_len];
   qinfo->qtype = query->question->qtype;
-  qinfo->qclass = query->question->qclass;
+  qinfo->qclass = htons(T_IN);
   return qname_len + (int)sizeof(Question);
 }
 

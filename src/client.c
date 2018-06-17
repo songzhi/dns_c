@@ -24,7 +24,7 @@ int addQuery(unsigned char *reader, Query *query) {
   int qname_len = strlen((const char *)qname) + 1;
   Question *qinfo = (Question *)&reader[qname_len];
   qinfo->qtype = htons(query->question->qtype);
-  qinfo->qclass = htons(query->question->qclass); // internet
+  qinfo->qclass = htons(T_IN); // internet
   return qname_len + (int)sizeof(Question);
 }
 
@@ -45,7 +45,7 @@ void sendPacketAndGetResult(unsigned char *buf, int data_len) {
   dest.sin_family = AF_INET;
   dest.sin_port = htons(SERVER_PORT);
   dest.sin_addr.s_addr = inet_addr(LOCAL_SERVER_HOST);
-  printf("\nSending Packet...");
+  printf("\nSending Packet to %s ...", inet_ntoa(dest.sin_addr));
   connect(sock, (struct sockaddr *)&dest, sizeof(dest));
   if (send(sock, (char *)buf, data_len, 0) < 0) {
     perror("sendto failed");
@@ -72,9 +72,9 @@ int main(void) {
     printf("类型(A:1\\MS:15\\CNAME:5\\PTR:12):");
     scanf("%hu", &(questions[i].question->qtype));
     if (questions[i].question->qtype == Q_T_PTR) {
-      strcat(questions[i].name, ".in-addr.arpa");
+      strcat((char *)questions[i].name, ".in-addr.arpa");
     }
-    questions[i].question->qclass = 1;
+    questions[i].question->qclass = htons(T_IN);
   }
   unsigned char buf[65536];
   int data_len = setDNSPacket(buf+2, questions, ques_count);

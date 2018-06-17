@@ -42,9 +42,9 @@ void launchOtherServerFunc(gpointer key, gpointer value, gpointer user_data) {
   ResRecord *rr = (ResRecord *) (((GList *) value)->data);
   GList *hosts = (GList *) g_hash_table_lookup(a_table, rr->rdata);
   char *host = (char *) ((ResRecord *) hosts->data)->rdata;
-  char path[256] = "/home/lsongzhi/projects/dns/cmake-build-debug/bin/bin/root";
-//  strcat(path, g_get_current_dir());
-//  strcat(path, "/root");
+  char path[256] = "";// /home/lsongzhi/projects/dns/cmake-build-debug/bin/bin/root
+  strcat(path, g_get_current_dir());
+  strcat(path, "/root");
   if (fork() == 0) {
     execl(path, key, host, NULL);
     perror("子进程创建失败");
