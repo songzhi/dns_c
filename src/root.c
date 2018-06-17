@@ -113,17 +113,19 @@ int resolve(unsigned char *buf, DNS_Packet *packet, const char *serverHost,
       reader = buf + data_len;
     }
   } else if (authorities != NULL) {
-    if (packet->Header->rd) { // 递归查询
+    if (ntohs(packet->Header->rd)) { // 递归查询
       struct sockaddr_in dest_addr;
       int sock = socket(AF_INET, SOCK_DGRAM, 0);
       dest_addr.sin_family = AF_INET;
-      dest_addr.sin_addr.s_addr = inet_addr(ROOT_SERVER_HOST);
+      ResRecord *rr = (ResRecord *)additionals->data;
+      dest_addr.sin_addr.s_addr = inet_addr(rr->rdata);
       dest_addr.sin_port = htons(SERVER_PORT);
       socklen_t sin_size = sizeof(struct sockaddr_in);
       sendto(sock, buf, packet->data_len, 0, (struct sockaddr *) &dest_addr,
              sin_size);
       data_len = recvfrom(sock, (char *) buf, 65536, 0,
                           (struct sockaddr *) &dest_addr, &sin_size);
+      return data_len;
     } else {
       for (GList *node = authorities; node != NULL;
            node = g_list_next(node), authCount++) {

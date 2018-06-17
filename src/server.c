@@ -7,7 +7,7 @@ void setDNSHeader(DNS_Header *header, uint16_t answerCount, uint16_t authCount, 
   header->qr = 1;     // This is a response
   header->opcode = 0; // This is a standard query
   header->aa = 1;     // Not Authoritative
-  header->rd = htons(recursionDesired);
+  header->rd = recursionDesired;
   header->answerCount = htons(answerCount);
   header->authorityCount = htons(authCount);
   header->additionalCount = htons(addCount);

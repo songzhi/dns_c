@@ -20,7 +20,7 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
   while (1) {
     printf("Sending to %s...", inet_ntoa(root_addr_udp.sin_addr));
     DNS_Header *header = (DNS_Header *)tldbuf;
-    header->rd = htons(IS_RECURSIVE);
+    header->rd = IS_RECURSIVE;
     sendto(sock, tldbuf, data_len, 0, (struct sockaddr *)&root_addr_udp,
            sin_size);
     printf("Done\nReceiving from %s...", inet_ntoa(root_addr_udp.sin_addr));
@@ -30,7 +30,10 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
 
     if (IS_RECURSIVE) {
       memcpy(buf, tldbuf, n);
+      DNS_Header *dnsHeader = (DNS_Header *)buf;
+      dnsHeader->rd = 1;
       data_len = n;
+      break;
     } else {
       readDNSPacket(tldbuf, &tld_packet);
       printPacket(&tld_packet);
@@ -42,8 +45,18 @@ int resolve(unsigned char *buf, DNS_Packet *packet) {
         if (tld_packet.Header->rcode == 0) { // 缓存成功的查询
           for (int i=0;i<ntohs(tld_packet.Header->answerCount);i++) {
             ResRecord *rr = tld_packet.Answer_RRs+i;
-            fprintf(CACHE_FP, "%s %d %s %s %s\n", rr->name, rr->resource->ttl, "IN",
-                    RR_TYPES[ntohs(rr->resource->type)], rr->rdata);
+            char *rdata;
+            if (ntohs(rr->resource->type) == Q_T_A) {
+              long *p = (long *) rr->rdata;
+              struct sockaddr_in a;
+              a.sin_addr.s_addr = (*p);
+              rdata = inet_ntoa(a.sin_addr);
+            }else {
+              rdata = rr->rdata;
+            }
+            fprintf(CACHE_FP, "%s %d %s %s %s\n", rr->name, ntohl(rr->resource->ttl), "IN",
+                    RR_TYPES[ntohs(rr->resource->type)], rdata);
+            fflush(CACHE_FP);
           }
         }
         memcpy(buf, tldbuf, n);
@@ -66,9 +79,11 @@ void initRR_TYPES(void) {
 
 int main(void) {
   unsigned char buf[65536];
+  printf("选择是否递归查找(1/0):");
+  scanf("%d",&IS_RECURSIVE);
   initRR_TYPES();
   CACHE_TABLES = readResRecords("data/local.cache");
-  CACHE_FP = fopen("data/local.cache", "a");
+  CACHE_FP = fopen("data/local.cache", "a+");
   if (CACHE_FP == NULL) {
     printf("打开缓存文件失败\n");
   }
